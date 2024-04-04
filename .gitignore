@@ -1,0 +1,29 @@
+# Node.js dependencies
+node_modules/
+
+# TypeScript build output
+dist/
+
+# Environment variables
+.env
+
+# Editor files
+.vscode/
+*.code-workspace
+
+# Mac OS files
+.DS_Store
+
+# Log files
+*.log
+
+# Dependency lock files
+package-lock.json
+yarn.lock
+
+# ESLint cache
+.eslintcache
+
+# Prettier cache
+.prettierignore
+.prettier.json
