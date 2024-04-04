@@ -9,5 +9,6 @@
   ],
   "rules": {
     // Add specific rules if needed
+    "prettier/prettier": "error"
   }
 }
