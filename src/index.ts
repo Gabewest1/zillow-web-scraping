@@ -1,21 +1,22 @@
-// web scrape zillow.com for land/lots for sale in the US
-// and save the data to a csv file
-import puppeteer from 'puppeteer';
-import fs from 'fs';
-// import csv from "csv-parser";
+import puppeteer, { Page } from 'puppeteer';
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const url =
-  'https://www.zillow.com/homes/for_sale/land_type/1-_acre/1_pnd/12m_days';
+  'https://www.redfin.com/county/2650/TX/Bastrop-County/filter/property-type=land,status=active+contingent+pending';
 
-const resultsSelector = '.result-count';
-const searchBarSelector = 'input';
-const forSaleSoldSelector = '#listing-type button';
-const soldButtonSelector = '#isRecentlySold';
-const saleButtonSelector =
-  '#isForSaleByAgent_isForSaleByOwner_isNewConstruction_isComingSoon_isAuction_isForSaleForeclosure_isPreMarketForeclosure_isPreMarketPreForeclosure';
+const resultsSelector = 'div[data-rf-test-id="homes-description"]';
+const filtersSelector = 'div[data-rf-test-id="filterButton"]';
+const searchBarSelector = '#search-box-input';
+const forSaleSoldSelector =
+  '.RichSelect.RichSelect__size--compact.ExposedSearchFilter.ExposedSearchModeFilter.ExposedSearchFilter--desktop';
+const soldButtonSelector = '#sold';
+const saleButtonSelector = '#for-sale';
+const comingSoonSelector = '#comingSoon';
+const activeSelector = '#active';
+const pendingSelector = '#underContractPending';
 
-const counties = ['travis', 'williamson', 'hays', 'bastrop', 'burnet'];
+const counties = ['Travis'];
+// const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 
 type Result = {
   county: string;
@@ -23,59 +24,160 @@ type Result = {
   forSale: string | undefined;
 };
 
-function pause() {
+function pause(ms: number = 3000) {
   return new Promise((resolve) => {
-    setTimeout(resolve, 3000);
+    setTimeout(resolve, ms);
   });
+}
+
+async function selectForSale(page: Page) {
+  console.log('inside selectForSale');
+  await page.click(forSaleSoldSelector);
+
+  const saleButtonElement = await page.waitForSelector(saleButtonSelector);
+  const isSelected = await saleButtonElement?.evaluate((el) => {
+    return el.getAttribute('aria-selected');
+  });
+
+  if (isSelected === 'false') {
+    await page.click(saleButtonSelector);
+  }
+
+  const comingSoonElement = await page.waitForSelector(comingSoonSelector);
+  const isActiveElement = await page.waitForSelector(activeSelector);
+  const isPendingElement = await page.waitForSelector(pendingSelector);
+
+  const isComingSoonSelected = await comingSoonElement?.evaluate((el) => {
+    return el.getAttribute('aria-selected');
+  });
+
+  const isActiveSelected = await isActiveElement?.evaluate((el) => {
+    return el.getAttribute('aria-selected');
+  });
+
+  const isPendingSelected = await isPendingElement?.evaluate((el) => {
+    return el.getAttribute('aria-selected');
+  });
+
+  if (isComingSoonSelected === 'true') {
+    await page.click(comingSoonSelector);
+  }
+
+  if (isActiveSelected === 'false') {
+    await page.click(activeSelector);
+  }
+
+  if (isPendingSelected === 'false') {
+    await page.click(pendingSelector);
+  }
+
+  await page.click('.ExposedSearchFilter__doneBtn');
+  await pause(1000);
+}
+
+async function selectSold(page: Page) {
+  await page.click(forSaleSoldSelector);
+  await page.click(soldButtonSelector);
+  await page.click('#Last1year');
+  await page.click('.ExposedSearchFilter__doneBtn');
+  await pause(1000);
+}
+
+async function collectResults(page: Page) {
+  const resultsElement = await page.waitForSelector(resultsSelector);
+  const numberForSale = await resultsElement?.evaluate((el) => {
+    return el.textContent?.split(' ')[0] ?? '';
+  });
+  return numberForSale;
+}
+
+async function manuallyClickElement(page: Page, selector: string) {
+  const element = await page.waitForSelector(selector);
+  console.log('element', element);
+  await element?.evaluate((el) => {
+    const button = el as HTMLButtonElement;
+    console.log('button', button);
+    button.click();
+  });
+}
+
+async function selectLandOnly(page: Page) {
+  await page.click(filtersSelector);
+  // No good CSS selector so just need to know the land option is 4th in the list
+  const landSelector = '.PropertyTypes__items > div:nth-child(4)';
+  const landElement = await page.waitForSelector(landSelector);
+  console.log('landElement', landElement);
+  const isLandSelected = await landElement?.evaluate((el) => {
+    return el.getAttribute('aria-selected');
+  });
+  console.log('isLandSelected', isLandSelected);
+  if (isLandSelected === 'false') {
+    console.log('Clicking land');
+    await manuallyClickElement(page, landSelector);
+  }
+
+  console.log('Closing the filter section');
+  // await manuallyClickElement(page, 'button[aria-label="Close Button"]');
+  await page.click('div[data-rf-test-id="apply-search-options"]');
+  await pause(1000);
 }
 
 (async () => {
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     devtools: true,
-    timeout: 20000,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-infobars',
+      '--window-position=0,0',
+      '--ignore-certifcate-errors',
+      '--ignore-certifcate-errors-spki-list',
+      '--user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3312.0 Safari/537.36"',
+    ],
   });
   const page = await browser.newPage();
   await page.goto(url);
   await page.setViewport({ width: 1080, height: 1024 });
 
-  await pause();
-  await pause();
-
   const results: Result[] = [];
   for (const county of counties) {
-    const result: Result = { county, sold: undefined, forSale: undefined };
-    await page.waitForSelector(searchBarSelector);
+    try {
+      const result: Result = { county, sold: undefined, forSale: undefined };
+      await page.waitForSelector(searchBarSelector);
 
-    await page.click(searchBarSelector);
-    await page.keyboard.press('Backspace');
-    await page.type(searchBarSelector, `${county} County`, { delay: 100 });
-    await page.keyboard.press('Enter');
-    await pause();
+      // Clear search bar
+      await page.click(searchBarSelector);
+      await page.keyboard.press('Backspace');
+      await page.type(searchBarSelector, `${county} County`);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Enter');
+      await pause();
 
-    // Click on for sale button
-    // await page.waitForSelector(forSaleSoldSelector);
-    // await page.click(forSaleSoldSelector);
+      // Sometimes filters reset after searching a new county. Need to ensure we're looking at
+      // land and not houses
+      await selectLandOnly(page);
 
-    // await page.waitForSelector(saleButtonSelector);
-    // await page.click(saleButtonSelector);
+      // Click on for sale button
+      await selectForSale(page);
+      const numberForSale = await collectResults(page);
 
-    const resultsElement = await page.waitForSelector(resultsSelector);
-    const numberForSale = await resultsElement?.evaluate((el) => {
-      return el.innerHTML;
-    });
+      console.log('numberForSale', numberForSale);
+      result.forSale = numberForSale;
 
-    console.log('numberForSale', numberForSale);
-    result.forSale = numberForSale;
+      // click on sold button
+      await selectSold(page);
+      const numberSold = await collectResults(page);
 
-    // click on sold button
-    // await page.waitForSelector(forSaleSoldSelector);
-    // await page.click(forSaleSoldSelector);
+      console.log('numberSold', numberSold);
+      result.sold = numberSold;
 
-    // await page.waitForSelector(saleButtonSelector);
-    // await page.click(soldButtonSelector);
-    results.push(result);
-    console.log('result', result);
+      results.push(result);
+      console.log('result', result);
+    } catch (e) {
+      console.error(`Error processing ${county} county:`, e);
+      continue;
+    }
   }
 
   const csvWriter = createCsvWriter({
