@@ -15,8 +15,8 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-const counties = ['Travis'];
-// const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+// const counties = ['Travis'];
+const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 
 type Result = {
   county: string;
@@ -33,51 +33,91 @@ function pause(ms: number = 3000) {
 async function selectForSale(page: Page) {
   console.log('inside selectForSale');
   await page.click(forSaleSoldSelector);
+  await pause(500);
 
   const saleButtonElement = await page.waitForSelector(saleButtonSelector);
   const isSelected = await saleButtonElement?.evaluate((el) => {
-    return el.getAttribute('aria-selected');
+    return el.getAttribute('aria-checked');
   });
 
+  console.log('isSelected', isSelected);
   if (isSelected === 'false') {
     await page.click(saleButtonSelector);
   }
 
+  const forSaleAccordion = await page.waitForSelector(
+    '.SoldSection .Accordion__heading',
+  );
+  const isExpanded = await forSaleAccordion?.evaluate((el) => {
+    return el.getAttribute('aria-expanded');
+  });
+  console.log('forSale isExpanded', isExpanded);
+
+  if (isExpanded === 'false') {
+    console.log('expanding sold section accordion');
+    await page.click('.SoldSection .Accordion__heading');
+  }
+
+  await pause(1000);
   const comingSoonElement = await page.waitForSelector(comingSoonSelector);
   const isActiveElement = await page.waitForSelector(activeSelector);
   const isPendingElement = await page.waitForSelector(pendingSelector);
 
   const isComingSoonSelected = await comingSoonElement?.evaluate((el) => {
-    return el.getAttribute('aria-selected');
+    const checkbox = el as HTMLInputElement;
+    return checkbox.checked;
   });
+  console.log('isComingSoonSelected', isComingSoonSelected);
 
   const isActiveSelected = await isActiveElement?.evaluate((el) => {
-    return el.getAttribute('aria-selected');
+    const checkbox = el as HTMLInputElement;
+    return checkbox.checked;
   });
+  console.log('isActiveSelected', isActiveSelected);
 
   const isPendingSelected = await isPendingElement?.evaluate((el) => {
-    return el.getAttribute('aria-selected');
+    const checkbox = el as HTMLInputElement;
+    return checkbox.checked;
   });
+  console.log('isPendingSelected', isPendingSelected);
 
-  if (isComingSoonSelected === 'true') {
+  if (isComingSoonSelected === true) {
     await page.click(comingSoonSelector);
   }
 
-  if (isActiveSelected === 'false') {
+  if (isActiveSelected === false) {
     await page.click(activeSelector);
   }
 
-  if (isPendingSelected === 'false') {
+  if (isPendingSelected === false) {
     await page.click(pendingSelector);
   }
 
+  await pause(1000);
   await page.click('.ExposedSearchFilter__doneBtn');
   await pause(1000);
 }
 
 async function selectSold(page: Page) {
   await page.click(forSaleSoldSelector);
+  await pause(1000);
+
   await page.click(soldButtonSelector);
+  await pause(500);
+
+  const soldAccordion = await page.waitForSelector(
+    '.SoldSection .Accordion__heading',
+  );
+  const isExpanded = await soldAccordion?.evaluate((el) => {
+    return el.getAttribute('aria-expanded');
+  });
+  console.log('isExpanded', isExpanded);
+
+  if (isExpanded === 'false') {
+    console.log('expanding sold section accordion');
+    await page.click('.SoldSection .Accordion__heading');
+  }
+  await pause(1000);
   await page.click('#Last1year');
   await page.click('.ExposedSearchFilter__doneBtn');
   await pause(1000);
@@ -106,18 +146,17 @@ async function selectLandOnly(page: Page) {
   // No good CSS selector so just need to know the land option is 4th in the list
   const landSelector = '.PropertyTypes__items > div:nth-child(4)';
   const landElement = await page.waitForSelector(landSelector);
-  console.log('landElement', landElement);
+  // console.log('landElement', landElement);
   const isLandSelected = await landElement?.evaluate((el) => {
     return el.getAttribute('aria-selected');
   });
-  console.log('isLandSelected', isLandSelected);
+  // console.log('isLandSelected', isLandSelected);
   if (isLandSelected === 'false') {
-    console.log('Clicking land');
+    console.log('Clicking land Filter');
     await manuallyClickElement(page, landSelector);
   }
 
-  console.log('Closing the filter section');
-  // await manuallyClickElement(page, 'button[aria-label="Close Button"]');
+  // console.log('Closing the filter section');
   await page.click('div[data-rf-test-id="apply-search-options"]');
   await pause(1000);
 }
@@ -148,8 +187,18 @@ async function selectLandOnly(page: Page) {
 
       // Clear search bar
       await page.click(searchBarSelector);
-      await page.keyboard.press('Backspace');
+      await pause(2000);
+      await manuallyClickElement(
+        page,
+        'div[data-rf-test-name="search-box-clear"]',
+      );
+      await pause(500);
+      // await page.keyboard.press('Backspace');
+      // await page.keyboard.press('Backspace');
+      // await page.keyboard.press('Backspace');
+      // await page.keyboard.press('Backspace');
       await page.type(searchBarSelector, `${county} County`);
+      await pause(1000);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
       await pause();
