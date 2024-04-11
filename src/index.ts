@@ -15,8 +15,8 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-const counties = ['Travis'];
-// const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+// const counties = ['Travis'];
+const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const counties = ['Hays', 'Bastrop'];
 
 type Year = 'Last1year' | 'Last3months' | 'Last6months' | 'Last1month';
@@ -220,17 +220,22 @@ async function selectLandOnly(page: Page) {
 
       // Collect data on time took to sell in months
       const soldOptions: Year[] = [
+        'Last3months',
         'Last1year',
         'Last6months',
-        'Last3months',
         'Last1month',
       ];
       // Open the menu which allows you to sellect "For Rent | For Sale | Sold"
       await openSoldFilter(page);
       // Loop through 1 year, 3 months, 6 months, 1 month and collect data
       for (const yearSold of soldOptions) {
+        // When switching between years, the page makes an API call to get the data. We need to wait for that to finish
+        // before we can collect the data
+        const apiPromise = page.waitForResponse((res) => {
+          return res.url().includes('stingray/api/builder-boost');
+        });
         await page.click(`#${yearSold}`);
-        await pause(500);
+        await apiPromise;
         const numberSold = await collectResults(page);
         console.log('numberSold', numberSold);
         result[yearSold] = numberSold;
@@ -242,6 +247,7 @@ async function selectLandOnly(page: Page) {
       console.error(`Error processing ${county} county:`, e);
       continue;
     } finally {
+      console.log('results', results);
       console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
     }
   }
@@ -258,7 +264,6 @@ async function selectLandOnly(page: Page) {
     ],
   });
 
-  console.log('results', results);
   csvWriter
     .writeRecords(results)
     .then(() => console.log('The CSV file was written successfully'));
