@@ -1,4 +1,5 @@
 import puppeteer, { Page } from 'puppeteer';
+// import texasCounties from './constants/counties';
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const url =
@@ -16,10 +17,17 @@ const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
 // const counties = ['Travis'];
-const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const counties = ['Hays', 'Bastrop'];
 
 type Year = 'Last1year' | 'Last3months' | 'Last6months' | 'Last1month';
+type STR = 'STR1Year' | 'STR6Months' | 'STR3Months' | 'STR1Month';
+type STRMapper = {
+  Last1year: 'STR1Year';
+  Last3months: 'STR3Months';
+  Last6months: 'STR6Months';
+  Last1month: 'STR1Month';
+};
 
 type Result = {
   county: string;
@@ -27,7 +35,18 @@ type Result = {
   Last3months: string | undefined;
   Last6months: string | undefined;
   Last1month: string | undefined;
+  STR1Year: string | undefined;
+  STR6Months: string | undefined;
+  STR3Months: string | undefined;
+  STR1Month: string | undefined;
   forSale: string | undefined;
+};
+
+const STRMapper: STRMapper = {
+  Last1year: 'STR1Year',
+  Last3months: 'STR3Months',
+  Last6months: 'STR6Months',
+  Last1month: 'STR1Month',
 };
 
 function pause(ms: number = 3000) {
@@ -70,19 +89,16 @@ async function selectForSale(page: Page) {
     const checkbox = el as HTMLInputElement;
     return checkbox.checked;
   });
-  console.log('isComingSoonSelected', isComingSoonSelected);
 
   const isActiveSelected = await isActiveElement?.evaluate((el) => {
     const checkbox = el as HTMLInputElement;
     return checkbox.checked;
   });
-  console.log('isActiveSelected', isActiveSelected);
 
   const isPendingSelected = await isPendingElement?.evaluate((el) => {
     const checkbox = el as HTMLInputElement;
     return checkbox.checked;
   });
-  console.log('isPendingSelected', isPendingSelected);
 
   if (isComingSoonSelected === true) {
     await page.click(comingSoonSelector);
@@ -120,7 +136,7 @@ async function openSoldFilter(page: Page) {
 async function collectResults(page: Page) {
   const resultsElement = await page.waitForSelector(resultsSelector);
   const numberForSale = await resultsElement?.evaluate((el) => {
-    return el.textContent?.split(' ')[0] ?? '';
+    return el.textContent?.split(' ')[0].replaceAll(',', '') ?? '';
   });
   return numberForSale;
 }
@@ -144,7 +160,6 @@ async function selectLandOnly(page: Page) {
     return el.getAttribute('aria-selected');
   });
   if (isLandSelected === 'false') {
-    console.log('Clicking land Filter');
     await manuallyClickElement(page, landSelector);
   }
 
@@ -152,8 +167,9 @@ async function selectLandOnly(page: Page) {
   await page.click('div[data-rf-test-id="apply-search-options"]');
 }
 
-(async () => {
-  let start = Date.now();
+let results: Result[] = [];
+let start: number;
+async function scrapeData() {
   const browser = await puppeteer.launch({
     headless: false,
     devtools: true,
@@ -166,14 +182,15 @@ async function selectLandOnly(page: Page) {
       '--ignore-certifcate-errors-spki-list',
       '--user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3312.0 Safari/537.36"',
     ],
-    slowMo: 50,
+    slowMo: 0,
   });
   const page = await browser.newPage();
   await page.goto(url, { timeout: 120000 });
   await page.setViewport({ width: 1080, height: 1024 });
 
-  const results: Result[] = [];
-  for (const county of counties) {
+  results = [];
+  for (const county of texasCounties) {
+    const start = Date.now();
     try {
       const result: Result = {
         county,
@@ -181,6 +198,10 @@ async function selectLandOnly(page: Page) {
         Last6months: undefined,
         Last3months: undefined,
         Last1month: undefined,
+        STR1Year: undefined,
+        STR6Months: undefined,
+        STR3Months: undefined,
+        STR1Month: undefined,
         forSale: undefined,
       };
 
@@ -237,8 +258,14 @@ async function selectLandOnly(page: Page) {
         await page.click(`#${yearSold}`);
         await apiPromise;
         const numberSold = await collectResults(page);
-        console.log('numberSold', numberSold);
         result[yearSold] = numberSold;
+        result[STRMapper[yearSold]] =
+          '%' +
+          (
+            (parseInt(numberSold as string) /
+              parseInt(numberForSale as string)) *
+            100
+          ).toFixed(2);
       }
 
       results.push(result);
@@ -247,26 +274,45 @@ async function selectLandOnly(page: Page) {
       console.error(`Error processing ${county} county:`, e);
       continue;
     } finally {
-      console.log('results', results);
-      console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
+      console.log(
+        `Time to complete ${county}`,
+        (Date.now() - start) / 1000,
+        'seconds',
+      );
     }
   }
 
-  const csvWriter = createCsvWriter({
-    path: 'zillow_land.csv',
-    header: [
-      { id: 'county', title: 'County' },
-      { id: 'forSale', title: 'For Sale' },
-      { id: 'Last1year', title: 'Sold Last Year' },
-      { id: 'Last6months', title: 'Sold Last 6 Months' },
-      { id: 'Last3months', title: 'Sold Last 3 Months' },
-      { id: 'Last1month', title: 'Sold Last Month' },
-    ],
-  });
-
-  csvWriter
-    .writeRecords(results)
-    .then(() => console.log('The CSV file was written successfully'));
-
   await browser.close();
-})();
+}
+
+async function main() {
+  const start = Date.now();
+
+  try {
+    await scrapeData();
+  } finally {
+    console.log('results', results);
+    console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
+
+    const csvWriter = createCsvWriter({
+      path: 'zillow_land.csv',
+      header: [
+        { id: 'county', title: 'County' },
+        { id: 'forSale', title: 'For Sale' },
+        { id: 'Last1year', title: 'Sold Last Year' },
+        { id: 'Last6months', title: 'Sold Last 6 Months' },
+        { id: 'Last3months', title: 'Sold Last 3 Months' },
+        { id: 'Last1month', title: 'Sold Last Month' },
+        { id: 'STR1Year', title: 'STR Last Year' },
+        { id: 'STR6Months', title: 'STR Last 6 Months' },
+        { id: 'STR3Months', title: 'STR Last 3 Months' },
+        { id: 'STR1Month', title: 'STR Last Month' },
+      ],
+    });
+
+    await csvWriter.writeRecords(results);
+    console.log('The CSV file was written successfully');
+  }
+}
+
+main();
