@@ -17,6 +17,7 @@ const pendingSelector = '#underContractPending';
 
 // const counties = ['Travis'];
 const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+// const counties = ['Hays', 'Bastrop'];
 
 type Result = {
   county: string;
@@ -31,16 +32,15 @@ function pause(ms: number = 3000) {
 }
 
 async function selectForSale(page: Page) {
-  console.log('inside selectForSale');
   await page.click(forSaleSoldSelector);
-  await pause(500);
+  await pause(1000);
 
+  // Ensure for sale button is selected
   const saleButtonElement = await page.waitForSelector(saleButtonSelector);
   const isSelected = await saleButtonElement?.evaluate((el) => {
     return el.getAttribute('aria-checked');
   });
 
-  console.log('isSelected', isSelected);
   if (isSelected === 'false') {
     await page.click(saleButtonSelector);
   }
@@ -51,13 +51,13 @@ async function selectForSale(page: Page) {
   const isExpanded = await forSaleAccordion?.evaluate((el) => {
     return el.getAttribute('aria-expanded');
   });
-  console.log('forSale isExpanded', isExpanded);
 
   if (isExpanded === 'false') {
     console.log('expanding sold section accordion');
     await page.click('.SoldSection .Accordion__heading');
   }
 
+  // Allow for sale accordion to expand
   await pause(1000);
   const comingSoonElement = await page.waitForSelector(comingSoonSelector);
   const isActiveElement = await page.waitForSelector(activeSelector);
@@ -162,6 +162,7 @@ async function selectLandOnly(page: Page) {
 }
 
 (async () => {
+  let start = Date.now();
   const browser = await puppeteer.launch({
     headless: false,
     devtools: true,
@@ -174,31 +175,38 @@ async function selectLandOnly(page: Page) {
       '--ignore-certifcate-errors-spki-list',
       '--user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3312.0 Safari/537.36"',
     ],
+    slowMo: 50,
   });
   const page = await browser.newPage();
-  await page.goto(url);
+  await page.goto(url, { timeout: 120000 });
   await page.setViewport({ width: 1080, height: 1024 });
 
   const results: Result[] = [];
   for (const county of counties) {
     try {
       const result: Result = { county, sold: undefined, forSale: undefined };
-      await page.waitForSelector(searchBarSelector);
 
       // Clear search bar
-      await page.click(searchBarSelector);
-      await pause(2000);
-      await manuallyClickElement(
-        page,
-        'div[data-rf-test-name="search-box-clear"]',
-      );
-      await pause(500);
-      // await page.keyboard.press('Backspace');
-      // await page.keyboard.press('Backspace');
-      // await page.keyboard.press('Backspace');
-      // await page.keyboard.press('Backspace');
-      await page.type(searchBarSelector, `${county} County`);
+      const searchBarElement = await page.waitForSelector(searchBarSelector);
+
+      searchBarElement?.evaluate((el) => {
+        const input = el as HTMLInputElement;
+        input.value = '';
+      });
+      let x = 0;
+      while (x < 5) {
+        await page.evaluate(() => {
+          const input = document.querySelector(
+            '#search-box-input',
+          ) as HTMLInputElement;
+          input.value = '';
+        });
+        x++;
+      }
+
       await pause(1000);
+      await page.type(searchBarSelector, `${county} County`);
+      await pause(2000);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
       await pause();
@@ -226,6 +234,8 @@ async function selectLandOnly(page: Page) {
     } catch (e) {
       console.error(`Error processing ${county} county:`, e);
       continue;
+    } finally {
+      console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
     }
   }
 
