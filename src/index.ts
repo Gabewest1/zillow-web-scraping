@@ -95,7 +95,6 @@ async function selectForSale(page: Page) {
 
   await pause(1000);
   await page.click('.ExposedSearchFilter__doneBtn');
-  await pause(1000);
 }
 
 async function selectSold(page: Page) {
@@ -120,7 +119,6 @@ async function selectSold(page: Page) {
   await pause(1000);
   await page.click('#Last1year');
   await page.click('.ExposedSearchFilter__doneBtn');
-  await pause(1000);
 }
 
 async function collectResults(page: Page) {
@@ -158,7 +156,6 @@ async function selectLandOnly(page: Page) {
 
   // console.log('Closing the filter section');
   await page.click('div[data-rf-test-id="apply-search-options"]');
-  await pause(1000);
 }
 
 (async () => {
@@ -204,19 +201,20 @@ async function selectLandOnly(page: Page) {
         x++;
       }
 
-      await pause(1000);
       await page.type(searchBarSelector, `${county} County`);
-      await pause(2000);
+      await pause(1000);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
-      await pause();
+      // await pause();
 
       // Sometimes filters reset after searching a new county. Need to ensure we're looking at
       // land and not houses
       await selectLandOnly(page);
+      // await pause(1000);
 
       // Click on for sale button
       await selectForSale(page);
+      // await pause(1000);
       const numberForSale = await collectResults(page);
 
       console.log('numberForSale', numberForSale);
@@ -224,6 +222,8 @@ async function selectLandOnly(page: Page) {
 
       // click on sold button
       await selectSold(page);
+
+      // await pause(1000);
       const numberSold = await collectResults(page);
 
       console.log('numberSold', numberSold);
