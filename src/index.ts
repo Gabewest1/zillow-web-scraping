@@ -15,13 +15,18 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-// const counties = ['Travis'];
-const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+const counties = ['Travis'];
+// const counties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const counties = ['Hays', 'Bastrop'];
+
+type Year = 'Last1year' | 'Last3months' | 'Last6months' | 'Last1month';
 
 type Result = {
   county: string;
-  sold: string | undefined;
+  Last1year: string | undefined;
+  Last3months: string | undefined;
+  Last6months: string | undefined;
+  Last1month: string | undefined;
   forSale: string | undefined;
 };
 
@@ -33,7 +38,6 @@ function pause(ms: number = 3000) {
 
 async function selectForSale(page: Page) {
   await page.click(forSaleSoldSelector);
-  await pause(1000);
 
   // Ensure for sale button is selected
   const saleButtonElement = await page.waitForSelector(saleButtonSelector);
@@ -46,7 +50,7 @@ async function selectForSale(page: Page) {
   }
 
   const forSaleAccordion = await page.waitForSelector(
-    '.SoldSection .Accordion__heading',
+    '.ForSaleSection .Accordion__heading',
   );
   const isExpanded = await forSaleAccordion?.evaluate((el) => {
     return el.getAttribute('aria-expanded');
@@ -54,11 +58,10 @@ async function selectForSale(page: Page) {
 
   if (isExpanded === 'false') {
     console.log('expanding sold section accordion');
-    await page.click('.SoldSection .Accordion__heading');
+    await page.click('.ForSaleSection .Accordion__heading');
   }
 
   // Allow for sale accordion to expand
-  await pause(1000);
   const comingSoonElement = await page.waitForSelector(comingSoonSelector);
   const isActiveElement = await page.waitForSelector(activeSelector);
   const isPendingElement = await page.waitForSelector(pendingSelector);
@@ -93,16 +96,13 @@ async function selectForSale(page: Page) {
     await page.click(pendingSelector);
   }
 
-  await pause(1000);
   await page.click('.ExposedSearchFilter__doneBtn');
 }
 
-async function selectSold(page: Page) {
+async function openSoldFilter(page: Page) {
   await page.click(forSaleSoldSelector);
-  await pause(1000);
 
   await page.click(soldButtonSelector);
-  await pause(500);
 
   const soldAccordion = await page.waitForSelector(
     '.SoldSection .Accordion__heading',
@@ -110,15 +110,11 @@ async function selectSold(page: Page) {
   const isExpanded = await soldAccordion?.evaluate((el) => {
     return el.getAttribute('aria-expanded');
   });
-  console.log('isExpanded', isExpanded);
 
   if (isExpanded === 'false') {
     console.log('expanding sold section accordion');
     await page.click('.SoldSection .Accordion__heading');
   }
-  await pause(1000);
-  await page.click('#Last1year');
-  await page.click('.ExposedSearchFilter__doneBtn');
 }
 
 async function collectResults(page: Page) {
@@ -131,30 +127,28 @@ async function collectResults(page: Page) {
 
 async function manuallyClickElement(page: Page, selector: string) {
   const element = await page.waitForSelector(selector);
-  console.log('element', element);
   await element?.evaluate((el) => {
     const button = el as HTMLButtonElement;
-    console.log('button', button);
     button.click();
   });
 }
 
 async function selectLandOnly(page: Page) {
+  // Open the filter menu
   await page.click(filtersSelector);
+
   // No good CSS selector so just need to know the land option is 4th in the list
   const landSelector = '.PropertyTypes__items > div:nth-child(4)';
   const landElement = await page.waitForSelector(landSelector);
-  // console.log('landElement', landElement);
   const isLandSelected = await landElement?.evaluate((el) => {
     return el.getAttribute('aria-selected');
   });
-  // console.log('isLandSelected', isLandSelected);
   if (isLandSelected === 'false') {
     console.log('Clicking land Filter');
     await manuallyClickElement(page, landSelector);
   }
 
-  // console.log('Closing the filter section');
+  // Close the filter menu
   await page.click('div[data-rf-test-id="apply-search-options"]');
 }
 
@@ -181,7 +175,14 @@ async function selectLandOnly(page: Page) {
   const results: Result[] = [];
   for (const county of counties) {
     try {
-      const result: Result = { county, sold: undefined, forSale: undefined };
+      const result: Result = {
+        county,
+        Last1year: undefined,
+        Last6months: undefined,
+        Last3months: undefined,
+        Last1month: undefined,
+        forSale: undefined,
+      };
 
       // Clear search bar
       const searchBarElement = await page.waitForSelector(searchBarSelector);
@@ -205,29 +206,35 @@ async function selectLandOnly(page: Page) {
       await pause(1000);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
-      // await pause();
 
       // Sometimes filters reset after searching a new county. Need to ensure we're looking at
       // land and not houses
       await selectLandOnly(page);
-      // await pause(1000);
 
       // Click on for sale button
       await selectForSale(page);
-      // await pause(1000);
       const numberForSale = await collectResults(page);
 
       console.log('numberForSale', numberForSale);
       result.forSale = numberForSale;
 
-      // click on sold button
-      await selectSold(page);
-
-      // await pause(1000);
-      const numberSold = await collectResults(page);
-
-      console.log('numberSold', numberSold);
-      result.sold = numberSold;
+      // Collect data on time took to sell in months
+      const soldOptions: Year[] = [
+        'Last1year',
+        'Last6months',
+        'Last3months',
+        'Last1month',
+      ];
+      // Open the menu which allows you to sellect "For Rent | For Sale | Sold"
+      await openSoldFilter(page);
+      // Loop through 1 year, 3 months, 6 months, 1 month and collect data
+      for (const yearSold of soldOptions) {
+        await page.click(`#${yearSold}`);
+        await pause(500);
+        const numberSold = await collectResults(page);
+        console.log('numberSold', numberSold);
+        result[yearSold] = numberSold;
+      }
 
       results.push(result);
       console.log('result', result);
@@ -243,8 +250,11 @@ async function selectLandOnly(page: Page) {
     path: 'zillow_land.csv',
     header: [
       { id: 'county', title: 'County' },
-      { id: 'sold', title: 'Sold' },
       { id: 'forSale', title: 'For Sale' },
+      { id: 'Last1year', title: 'Sold Last Year' },
+      { id: 'Last6months', title: 'Sold Last 6 Months' },
+      { id: 'Last3months', title: 'Sold Last 3 Months' },
+      { id: 'Last1month', title: 'Sold Last Month' },
     ],
   });
 

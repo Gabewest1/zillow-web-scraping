@@ -1,6 +1,2 @@
-County,Sold,For Sale
-Travis,527,"1,239"
-Williamson,209,457
-Hays,205,382
-Bastrop,365,508
-Burnet,378,839
+County,For Sale,Sold Last Year,Sold Last 6 Months,Sold Last 3 Months,Sold Last Month
+Travis,"1,239",527,350,114,37
