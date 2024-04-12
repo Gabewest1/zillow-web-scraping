@@ -16,9 +16,9 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-// const counties = ['Travis'];
-const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
-// const counties = ['Hays', 'Bastrop'];
+const texasCounties = ['McLennan '];
+// const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
+// const texasCounties = ['Hays', 'Bastrop'];
 
 type Year = 'Last1year' | 'Last3months' | 'Last6months' | 'Last1month';
 type STR = 'STR1Year' | 'STR6Months' | 'STR3Months' | 'STR1Month';
@@ -76,7 +76,6 @@ async function selectForSale(page: Page) {
   });
 
   if (isExpanded === 'false') {
-    console.log('expanding sold section accordion');
     await page.click('.ForSaleSection .Accordion__heading');
   }
 
@@ -128,7 +127,6 @@ async function openSoldFilter(page: Page) {
   });
 
   if (isExpanded === 'false') {
-    console.log('expanding sold section accordion');
     await page.click('.SoldSection .Accordion__heading');
   }
 }
@@ -168,7 +166,6 @@ async function selectLandOnly(page: Page) {
 }
 
 let results: Result[] = [];
-let start: number;
 async function scrapeData() {
   const browser = await puppeteer.launch({
     headless: false,
@@ -182,7 +179,7 @@ async function scrapeData() {
       '--ignore-certifcate-errors-spki-list',
       '--user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3312.0 Safari/537.36"',
     ],
-    slowMo: 0,
+    slowMo: 25,
   });
   const page = await browser.newPage();
   await page.goto(url, { timeout: 120000 });
@@ -223,7 +220,8 @@ async function scrapeData() {
         x++;
       }
 
-      await page.type(searchBarSelector, `${county} County`);
+      // Type in county name
+      await page.type(searchBarSelector, `${county} County, TX`);
       await pause(1000);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
@@ -235,8 +233,6 @@ async function scrapeData() {
       // Click on for sale button
       await selectForSale(page);
       const numberForSale = await collectResults(page);
-
-      console.log('numberForSale', numberForSale);
       result.forSale = numberForSale;
 
       // Collect data on time took to sell in months
@@ -269,7 +265,7 @@ async function scrapeData() {
       }
 
       results.push(result);
-      console.log('result', result);
+      // console.log('result', result);
     } catch (e) {
       console.error(`Error processing ${county} county:`, e);
       continue;
