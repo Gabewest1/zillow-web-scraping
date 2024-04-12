@@ -16,7 +16,7 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-const texasCounties = ['McLennan '];
+const texasCounties = ['Knox'];
 // const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const texasCounties = ['Hays', 'Bastrop'];
 
@@ -188,6 +188,7 @@ async function scrapeData() {
   results = [];
   for (const county of texasCounties) {
     const start = Date.now();
+    const fullCountyText = `${county} County`;
     try {
       const result: Result = {
         county,
@@ -221,10 +222,24 @@ async function scrapeData() {
       }
 
       // Type in county name
-      await page.type(searchBarSelector, `${county} County, TX`);
-      await pause(1000);
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('Enter');
+      await page.type(searchBarSelector, fullCountyText);
+      const placesList = await page.waitForSelector(
+        'div[data-rf-test-name="expanded-results"] > div:nth-child(2)',
+      );
+      // Search Autocomplete options for one that matches the county
+      placesList?.evaluate((el, fullCountyText) => {
+        const places = el as HTMLElement;
+
+        const place = Array.from(places.children[0].children).find((child) => {
+          const matchesCounty = child.textContent?.includes(fullCountyText);
+          const matchesState = child.textContent?.toUpperCase().includes('TX');
+          return matchesCounty && matchesState;
+        }) as HTMLElement;
+
+        place.click();
+      }, fullCountyText);
+
+      await page.waitForNavigation();
 
       // Sometimes filters reset after searching a new county. Need to ensure we're looking at
       // land and not houses
