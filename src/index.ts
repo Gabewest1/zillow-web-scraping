@@ -1,5 +1,5 @@
 import puppeteer, { Page } from 'puppeteer';
-// import texasCounties from './constants/counties';
+import texasCounties from './constants/counties';
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const url =
@@ -16,7 +16,7 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-const texasCounties = ['Knox'];
+// const texasCounties = ['Knox'];
 // const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const texasCounties = ['Hays', 'Bastrop'];
 
@@ -143,7 +143,7 @@ async function manuallyClickElement(page: Page, selector: string) {
   const element = await page.waitForSelector(selector);
   await element?.evaluate((el) => {
     const button = el as HTMLButtonElement;
-    button.click();
+    button?.click();
   });
 }
 
@@ -162,6 +162,7 @@ async function selectLandOnly(page: Page) {
   }
 
   // Close the filter menu
+  await page.waitForSelector('div[data-rf-test-id="apply-search-options"]');
   await page.click('div[data-rf-test-id="apply-search-options"]');
 }
 
@@ -204,39 +205,41 @@ async function scrapeData() {
       };
 
       // Clear search bar
-      const searchBarElement = await page.waitForSelector(searchBarSelector);
-
-      searchBarElement?.evaluate((el) => {
-        const input = el as HTMLInputElement;
-        input.value = '';
-      });
-      let x = 0;
-      while (x < 5) {
-        await page.evaluate(() => {
-          const input = document.querySelector(
-            '#search-box-input',
-          ) as HTMLInputElement;
-          input.value = '';
-        });
-        x++;
-      }
+      await page.click(searchBarSelector);
+      await pause();
+      await manuallyClickElement(
+        page,
+        'div[data-rf-test-name="search-box-clear"]',
+      );
+      // Clearing twice b/c was seeing flake
+      // const searchBarElement = await page.waitForSelector(searchBarSelector);
+      // await pause(10000);
+      // await searchBarElement?.evaluate((el) => {
+      //   const input = el as HTMLInputElement;
+      //   input.value = '';
+      // });
+      // await page.evaluate(() => {
+      //   const input = document.querySelector(
+      //     '#search-box-input',
+      //   ) as HTMLInputElement;
+      //   input.value = '';
+      // });
 
       // Type in county name
       await page.type(searchBarSelector, fullCountyText);
       const placesList = await page.waitForSelector(
-        'div[data-rf-test-name="expanded-results"] > div:nth-child(2)',
+        'div[data-rf-test-name="expanded-results"] > div:nth-child(2) .expanded-row-content',
       );
       // Search Autocomplete options for one that matches the county
-      placesList?.evaluate((el, fullCountyText) => {
+      await placesList?.evaluate((el, fullCountyText) => {
         const places = el as HTMLElement;
-
-        const place = Array.from(places.children[0].children).find((child) => {
+        const place = Array.from(places.children).find((child) => {
           const matchesCounty = child.textContent?.includes(fullCountyText);
           const matchesState = child.textContent?.toUpperCase().includes('TX');
           return matchesCounty && matchesState;
         }) as HTMLElement;
 
-        place.click();
+        place?.click();
       }, fullCountyText);
 
       await page.waitForNavigation();
@@ -301,6 +304,9 @@ async function main() {
 
   try {
     await scrapeData();
+  } catch (e) {
+    console.error('Main Error:', e);
+    throw e;
   } finally {
     console.log('results', results);
     console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
