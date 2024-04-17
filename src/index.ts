@@ -1,5 +1,5 @@
 import puppeteer, { Page } from 'puppeteer';
-import texasCounties from './constants/counties';
+// import texasCounties from './constants/counties';
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const url =
@@ -16,7 +16,14 @@ const comingSoonSelector = '#comingSoon';
 const activeSelector = '#active';
 const pendingSelector = '#underContractPending';
 
-// const texasCounties = ['Knox'];
+const texasCounties = [
+  // 'Brazos',
+  'Wichita',
+  // 'Comal',
+  // 'Montgomery',
+  // 'Harris',
+  // 'Hidalgo',
+];
 // const texasCounties = ['Travis', 'Williamson', 'Hays', 'Bastrop', 'Burnet'];
 // const texasCounties = ['Hays', 'Bastrop'];
 
@@ -109,6 +116,7 @@ async function selectForSale(page: Page) {
 
   if (isPendingSelected === false) {
     await page.click(pendingSelector);
+    await page.waitForNavigation();
   }
 
   await page.click('.ExposedSearchFilter__doneBtn');
@@ -166,7 +174,6 @@ async function selectLandOnly(page: Page) {
   await page.click('div[data-rf-test-id="apply-search-options"]');
 }
 
-let results: Result[] = [];
 async function scrapeData() {
   const browser = await puppeteer.launch({
     headless: false,
@@ -186,7 +193,22 @@ async function scrapeData() {
   await page.goto(url, { timeout: 120000 });
   await page.setViewport({ width: 1080, height: 1024 });
 
-  results = [];
+  const csvWriter = createCsvWriter({
+    path: 'zillow_land.csv',
+    header: [
+      { id: 'county', title: 'County' },
+      { id: 'forSale', title: 'For Sale' },
+      { id: 'Last1year', title: 'Sold Last Year' },
+      { id: 'Last6months', title: 'Sold Last 6 Months' },
+      { id: 'Last3months', title: 'Sold Last 3 Months' },
+      { id: 'Last1month', title: 'Sold Last Month' },
+      { id: 'STR1Year', title: 'STR Last Year' },
+      { id: 'STR6Months', title: 'STR Last 6 Months' },
+      { id: 'STR3Months', title: 'STR Last 3 Months' },
+      { id: 'STR1Month', title: 'STR Last Month' },
+    ],
+  });
+
   for (const county of texasCounties) {
     const start = Date.now();
     const fullCountyText = `${county} County`;
@@ -204,29 +226,19 @@ async function scrapeData() {
         forSale: undefined,
       };
 
-      // Clear search bar
-      await page.click(searchBarSelector);
-      await pause();
-      await manuallyClickElement(
-        page,
-        'div[data-rf-test-name="search-box-clear"]',
-      );
-      // Clearing twice b/c was seeing flake
-      // const searchBarElement = await page.waitForSelector(searchBarSelector);
-      // await pause(10000);
-      // await searchBarElement?.evaluate((el) => {
-      //   const input = el as HTMLInputElement;
-      //   input.value = '';
-      // });
-      // await page.evaluate(() => {
-      //   const input = document.querySelector(
-      //     '#search-box-input',
-      //   ) as HTMLInputElement;
-      //   input.value = '';
-      // });
-
       // Type in county name
-      await page.type(searchBarSelector, fullCountyText);
+      const searchBarElement = await page.waitForSelector(searchBarSelector);
+      await searchBarElement?.evaluate((el) => {
+        const input = el as HTMLInputElement;
+        input.value = '';
+      });
+      await page.evaluate(() => {
+        const input = document.querySelector(
+          '#search-box-input',
+        ) as HTMLInputElement;
+        input.value = '';
+      });
+      await page.type(searchBarSelector, fullCountyText, { delay: 100 });
       const placesList = await page.waitForSelector(
         'div[data-rf-test-name="expanded-results"] > div:nth-child(2) .expanded-row-content',
       );
@@ -251,6 +263,7 @@ async function scrapeData() {
       // Click on for sale button
       await selectForSale(page);
       const numberForSale = await collectResults(page);
+      console.log('numberForSale', numberForSale);
       result.forSale = numberForSale;
 
       // Collect data on time took to sell in months
@@ -282,7 +295,7 @@ async function scrapeData() {
           ).toFixed(2);
       }
 
-      results.push(result);
+      csvWriter.writeRecords([result]);
       // console.log('result', result);
     } catch (e) {
       console.error(`Error processing ${county} county:`, e);
@@ -308,27 +321,7 @@ async function main() {
     console.error('Main Error:', e);
     throw e;
   } finally {
-    console.log('results', results);
     console.log('Time elapsed:', (Date.now() - start) / 1000 / 60, 'minutes');
-
-    const csvWriter = createCsvWriter({
-      path: 'zillow_land.csv',
-      header: [
-        { id: 'county', title: 'County' },
-        { id: 'forSale', title: 'For Sale' },
-        { id: 'Last1year', title: 'Sold Last Year' },
-        { id: 'Last6months', title: 'Sold Last 6 Months' },
-        { id: 'Last3months', title: 'Sold Last 3 Months' },
-        { id: 'Last1month', title: 'Sold Last Month' },
-        { id: 'STR1Year', title: 'STR Last Year' },
-        { id: 'STR6Months', title: 'STR Last 6 Months' },
-        { id: 'STR3Months', title: 'STR Last 3 Months' },
-        { id: 'STR1Month', title: 'STR Last Month' },
-      ],
-    });
-
-    await csvWriter.writeRecords(results);
-    console.log('The CSV file was written successfully');
   }
 }
 
